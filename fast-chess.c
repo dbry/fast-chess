@@ -13,27 +13,27 @@
 // really fast by using a lot of inline code and making the final evaluation
 // as simple as possible, I could process enough moves to make a really good
 // player, but it never really worked out.
-//
+
 // I don't really know how good it is relative to other really simple chess
 // programs, but at level 5 (which is tolerable) it provides me a challenge
 // (which isn't saying much) and it doesn't seem to make really bad moves.
-//
+
 // It has no stored openings and it gets pretty lost in the endgame because
 // it can't look far ahead enough to force a checkmate even with overwhelming
 // material or recognize passed pawns until it's too late. So even if you
 // screw up and lose in the middle game you can sometimes get a pawn promoted
-// when it's not paying attention, or at least squeek out a draw by keeping
+// when it's not paying attention, or at least squeak out a draw by keeping
 // your king in the center of the board.
-//
+
 // Another thing I wanted was for the program to not play the same game every
 // time, so it randomly scrambles the moves before evaluating them (which
 // results in different outcomes). This also makes it more interesting when
 // it plays itself (which is a feature I've used extensively in development).
-//
+
 // To its credit it does handle all legal chess, including castling and its
-// rules, en passent capture, and detecting draws based on the 50-move rule
-// and 3-time position repitition.
-//
+// rules, en passant capture, and detecting draws based on the 50-move and
+// 3-time repeated position rules.
+
 // Good luck!
 
 #include "fast-chess.h"
