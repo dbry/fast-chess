@@ -136,7 +136,7 @@ int main (argc, argv) int argc; char **argv;
             bestmove.from = 0;
 
             if (level > 0)
-                eval_position (&frame, &bestmove, level, 20000, EVAL_BASE | EVAL_POSITION | EVAL_SCALE | EVAL_PRUNE | EVAL_DECAY);
+                eval_position (&frame, &bestmove, level, 20000, EVAL_BASE | EVAL_POSITION | EVAL_SCALE | EVAL_PRUNE | EVAL_DECAY | EVAL_SCRAMBLE);
             else if ((nmoves = generate_move_list (moves, &frame)) != 0) {
                 if (nmoves > MAX_MOVES) {
                     print_frame (stdout, &frame);
@@ -450,7 +450,8 @@ int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int f
         exit (1);
     }
 
-    scramble_moves (moves, nmoves);
+    if (flags & EVAL_SCRAMBLE)
+        scramble_moves (moves, nmoves);
 
     if (depth > 0 || frame->in_check) {
         min_value = 20000;

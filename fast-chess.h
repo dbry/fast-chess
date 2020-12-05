@@ -53,6 +53,7 @@
 #define EVAL_PRUNE      0x8
 #define EVAL_SCALE      0x10
 #define EVAL_DECAY      0x20
+#define EVAL_SCRAMBLE   0x40
 
 typedef unsigned char square;
 
