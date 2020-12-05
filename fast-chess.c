@@ -55,12 +55,12 @@ static char *help = "\n\
   -R:     randomize so that we always start with a different game\n\
   -Gn:    specify number of games to play (otherwise stops on keypress)\n\
   -Wn:    computer plays white at level n (1 to about 6; higher is slower)\n\
-  -Bn:    computer plays black at level n (1 to about 6; higher is slower)\n\
-  -En:    evaluate available moves at level n and display scores (default=2)\n\n\
+  -Bn:    computer plays black at level n (1 to about 6; higher is slower)\n\n\
  Commands:\n\
   H <cr>:        print this message\n\
   W n <cr>:      computer plays white at level n\n\
   B n <cr>:      computer plays black at level n\n\
+  E n <cr>:      evaluate legal moves at level n (default=2)\n\
   W <cr>:        returns white play to user\n\
   B <cr>:        returns black play to user\n\
   S <file><cr>:  save game to specified file\n\
