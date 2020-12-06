@@ -234,7 +234,7 @@ int main (argc, argv) int argc; char **argv;
                             case 'E': case 'e':
                                 eval_level = atoi (cptr);
                                 if (eval_level < 1) eval_level = 2;
-                                eval_position (&frame, NULL, eval_level, 20000, EVAL_DEBUG | EVAL_BASE | EVAL_POSITION | EVAL_SCALE | EVAL_DECAY);
+                                eval_position (&frame, NULL, eval_level, 20000, EVAL_DEBUG | EVAL_BASE | EVAL_POSITION | EVAL_SCALE | EVAL_DECAY | EVAL_PRUNE);
                                 break;
 
                             case 'S': case 's':
@@ -502,7 +502,7 @@ int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int f
 
             temp = *frame;
             execute_move (&temp, moves + mindex);
-            value = eval_position (&temp, NULL, depth-1, min_value, flags & ~(EVAL_DEBUG | EVAL_BASE));
+            value = eval_position (&temp, NULL, depth-1, (flags & EVAL_DEBUG) ? 20000 : min_value, flags & ~(EVAL_DEBUG | EVAL_BASE));
 
             if (flags & EVAL_DEBUG) {
                 printf ("%d: ", mindex + 1);
@@ -569,7 +569,7 @@ int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int f
             }
 
             execute_move (&temp, moves + mindex);
-            value = eval_position (&temp, NULL, depth-1, min_value, flags & ~(EVAL_DEBUG | EVAL_BASE));
+            value = eval_position (&temp, NULL, depth-1, min_value, flags);
 
             if (value < min_value)
                 min_value = value;
