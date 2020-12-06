@@ -119,8 +119,10 @@ void init_frame (FRAME *frame);
 void print_frame (FILE *out, FRAME *frame);
 void print_square_name (FILE *out, int index);
 void print_move (FILE *out, MOVE *move);
+void print_game (FILE *out, MOVE *gameplay, int nmoves);
 int input_square_name (char **in);
 int input_move (char *in, MOVE *move);
+int input_game (FILE *in, MOVE **gameplay, int *gameplay_moves);
 
 int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int flags);
 int in_check (FRAME *frame);

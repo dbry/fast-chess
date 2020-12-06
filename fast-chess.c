@@ -61,6 +61,7 @@ static char *help = "\n\
   W n <cr>:      computer plays white at level n\n\
   B n <cr>:      computer plays black at level n\n\
   E n <cr>:      evaluate legal moves at level n (default=2)\n\
+  T n <cr>:      take back n moves (default=1)\n\
   W <cr>:        returns white play to user\n\
   B <cr>:        returns black play to user\n\
   S <file><cr>:  save game to specified file\n\
@@ -71,7 +72,7 @@ static char *help = "\n\
 int main (argc, argv) int argc; char **argv;
 {
     int games_to_play = 0, games = 0, whitewins = 0, blackwins = 0, draws = 0, whitedraws = 0, blackdraws = 0;
-    int nmoves, mindex, maxmoves = 0, minmoves = 1000, asked4help = FALSE, quit = FALSE, resign;
+    int nmoves, mindex, maxmoves = 0, minmoves = 1000, asked4help = FALSE, quit = FALSE, resign = FALSE;
     int white_level = 0, black_level = 0, level;
     MOVE bestmove, moves [MAX_MOVES + 10];
     time_t start_time, stop_time;
@@ -128,6 +129,9 @@ int main (argc, argv) int argc; char **argv;
     time (&start_time);
 
     while (!quit && (!white_level || !black_level || !_kbhit())) {
+        int gameplay_moves = 0;
+        MOVE *gameplay = NULL;
+
         init_frame (&frame);
 
         while (!frame.drawn_game) {
@@ -147,7 +151,7 @@ int main (argc, argv) int argc; char **argv;
                 if (!level) {
                     print_frame (stdout, &frame);
                     fprintf (stderr, "input move or command: ");
-                    resign = FALSE;
+                    quit = resign = FALSE;
 
                     for (cptr = command; (*cptr = fgetc (stdin)) != '\n'; ++cptr);
 
@@ -175,14 +179,14 @@ int main (argc, argv) int argc; char **argv;
                         }
                     }
                     else {
-                        int eval_level;
+                        int eval_level, take_back = 0;;
 
                         while (*++cptr && *cptr == ' ');
 
                         switch (command [0]) {
 
                             default:
-                                fprintf (stderr, "illegal command\n\007");
+                                fprintf (stderr, "\nillegal command\n\007");
 
                             case 'H': case 'h':
                                 fprintf (stderr, "%s", help);
@@ -204,6 +208,29 @@ int main (argc, argv) int argc; char **argv;
                                 black_level = atoi (cptr);
                                 break;
 
+                            case 'T': case 't':
+                                take_back = atoi (cptr);
+
+                                if (!take_back) take_back = 1;
+
+                                if (white_level || black_level)
+                                    take_back *= 2;
+
+                                if (take_back > gameplay_moves)
+                                    take_back = gameplay_moves;
+
+                                if (take_back) {
+                                    init_frame (&frame);
+                                    gameplay_moves -= take_back;
+
+                                    for (mindex = 0; mindex < gameplay_moves; ++mindex)
+                                        execute_move (&frame, gameplay + mindex);
+                                }
+                                else
+                                    fprintf (stderr, "\nno moves to take back!\n\007");
+
+                                break;
+
                             case 'E': case 'e':
                                 eval_level = atoi (cptr);
                                 if (eval_level < 1) eval_level = 2;
@@ -212,34 +239,41 @@ int main (argc, argv) int argc; char **argv;
 
                             case 'S': case 's':
                                 if (!*cptr) {
-                                    fprintf (stderr, "need filename\n\007");
+                                    fprintf (stderr, "\nneed filename\n\007");
                                     break;
                                 }
 
-                                if ((file = fopen (cptr, "wb")) == NULL) {
-                                    fprintf (stderr, "can't open file %s\n\007", cptr);
+                                if ((file = fopen (cptr, "wt")) == NULL) {
+                                    fprintf (stderr, "\ncan't open file %s\n\007", cptr);
                                     break;
                                 }
 
-                                fwrite (&frame, sizeof (frame), 1, file);
+                                print_game (file, gameplay, gameplay_moves);
                                 fclose (file);
                                 break;
 
                             case 'L': case 'l':
                                 if (!*cptr) {
-                                    fprintf (stderr, "need filename\n\007");
+                                    fprintf (stderr, "\nneed filename\n\007");
                                     break;
                                 }
 
-                                if ((file = fopen (cptr, "rb")) == NULL) {
-                                    fprintf (stderr, "can't open file %s\n\007", cptr);
+                                if ((file = fopen (cptr, "rt")) == NULL) {
+                                    fprintf (stderr, "\ncan't open file %s\n\007", cptr);
                                     break;
                                 }
 
-                                if (!fread (&frame, sizeof (frame), 1, file))
-                                    fprintf (stderr, "can't read file %s\n\007", cptr);
+                                if (!input_game (file, &gameplay, &gameplay_moves)) {
+                                    fprintf (stderr, "\ninvalid game file %s\n\007", cptr);
+                                    break;
+                                }
 
                                 fclose (file);
+                                init_frame (&frame);
+
+                                for (mindex = 0; mindex < gameplay_moves; ++mindex)
+                                    execute_move (&frame, gameplay + mindex);
+
                                 break;
                         }
 
@@ -274,10 +308,15 @@ int main (argc, argv) int argc; char **argv;
                 }
 
                 execute_move (&frame, &bestmove);
+                gameplay = realloc (gameplay, (gameplay_moves + 1) * sizeof (MOVE));
+                gameplay [gameplay_moves++] = bestmove;
             }
             else
                 break;
         }
+
+        free (gameplay);
+        gameplay = NULL;
 
         if (frame.move_number > 1 || frame.move_color) {
             if (frame.drawn_game) {
@@ -1227,6 +1266,21 @@ void print_move (FILE *out, MOVE *move)
         fprintf (out, "   ");
 }
 
+void print_game (FILE *out, MOVE *gameplay, int nmoves)
+{
+    int mindex;
+
+    for (mindex = 0; mindex < nmoves; ++mindex) {
+        if (!(mindex & 1))
+            fprintf (out, "%3d: ", (mindex >> 1) + 1);
+
+        print_move (out, gameplay + mindex);
+
+        if ((mindex & 1) || mindex == nmoves - 1)
+            fprintf (out, "\n");
+    }
+}
+
 int input_square_name (char **in)
 {
     int rank, file, c;
@@ -1250,15 +1304,74 @@ int input_move (char *in, MOVE *move)
     int from, to;
 
     if ((from = input_square_name (&in)) != 0 && *in++ == '-' &&
-        (to = input_square_name (&in)) != 0 && (!*in || *in == '\n')) {
+        (to = input_square_name (&in)) != 0 && (!*in || *in == '\n' || *in == '/')) {
 
             move->from = from;
             move->delta = to - from;
             move->promo = 0;
+
+            if (*in == '/') {
+                if (in [1] == 'B' || in [1] == 'b')
+                    move->promo = BISHOP;
+                else if (in [1] == 'N' || in [1] == 'n')
+                    move->promo = KNIGHT;
+                else if (in [1] == 'Q' || in [1] == 'q')
+                    move->promo = QUEEN;
+                else if (in [1] == 'R' || in [1] == 'r')
+                    move->promo = ROOK;
+                else
+                    return FALSE;
+            }
+
             return TRUE;
     }
 
     return FALSE;
+}
+
+int input_game (FILE *in, MOVE **gameplay, int *gameplay_moves)
+{
+    char white [16], black [16];
+    MOVE *input_moves = NULL;
+    int input_count = 0;
+
+    while (1) {
+        int num, count = fscanf (in, "%d:%10s%10s", &num, white, black);
+
+        if (count < 2)
+            break;
+
+        if (num != input_count / 2 + 1) {
+            free (input_moves);
+            return FALSE;
+        }
+
+        input_moves = realloc (input_moves, sizeof (MOVE) * (input_count + 1));
+
+        if (!input_move (white, input_moves + input_count++)) {
+            free (input_moves);
+            return FALSE;
+        }
+
+        if (count == 3) {
+            input_moves = realloc (input_moves, sizeof (MOVE) * (input_count + 1));
+
+            if (!input_move (black, input_moves + input_count++)) {
+                free (input_moves);
+                return FALSE;
+            }
+        }
+    }
+
+    if (!input_count) {
+        free (input_moves);
+        return FALSE;
+    }
+
+    free (*gameplay);
+    *gameplay = input_moves;
+    *gameplay_moves = input_count;
+    return TRUE;
 }
 
 void scramble_moves (MOVE moves [], int nmoves)
