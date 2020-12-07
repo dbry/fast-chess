@@ -58,13 +58,15 @@ static const char *sign_on = "\n"
 " Copyright (c) 2020 David Bryant.  All Rights Reserved.\n\n";
 
 static char *help = "\n\
+ Usage:   fast-chess [options] [saved game to load on startup]\n\n\
  Options:\n\
+  -H:     display this help message\n\
   -R:     randomize so that we always start with a different game\n\
   -Gn:    specify number of games to play (otherwise stops on keypress)\n\
   -Wn:    computer plays white at level n (1 to about 6; higher is slower)\n\
   -Bn:    computer plays black at level n (1 to about 6; higher is slower)\n\n\
  Commands:\n\
-  H <cr>:        print this message\n\
+  H <cr>:        display this help message\n\
   W n <cr>:      computer plays white at level n\n\
   B n <cr>:      computer plays black at level n\n\
   E n <cr>:      evaluate legal moves at level n (default=2)\n\
@@ -83,7 +85,7 @@ int main (argc, argv) int argc; char **argv;
     int white_level = 0, black_level = 0, level;
     MOVE bestmove, moves [MAX_MOVES + 10];
     time_t start_time, stop_time;
-    char command [81], *cptr;
+    char *init_filename = NULL;
     long totalmoves = 0;
     FRAME frame;
     FILE *file;
@@ -118,10 +120,12 @@ int main (argc, argv) int argc; char **argv;
                     fprintf (stderr, "illegal option: %s\n%s", --*argv, help);
                     exit (1);
             }
-        else {
+        else if (init_filename) {
             fprintf (stderr, "argument ignored: %s\n%s", *argv, help);
             exit (1);
         }
+        else
+            init_filename = *argv;
     }
 
     printf ("%s", sign_on);
@@ -137,8 +141,26 @@ int main (argc, argv) int argc; char **argv;
 
         init_frame (&frame);
 
-        while (!frame.drawn_game) {
+        if (init_filename) {
+            FILE *file = fopen (init_filename, "rt");
 
+            if (file) {
+                if (input_game (file, &gameplay, &gameplay_moves))
+                    for (mindex = 0; mindex < gameplay_moves; ++mindex)
+                        execute_move (&frame, gameplay + mindex);
+
+                if (frame.move_number == 1 && !frame.move_color)
+                    fprintf (stderr, "\ninvalid game file %s\n\007", init_filename);
+
+                fclose (file);
+            }
+            else
+                fprintf (stderr, "\ncan't open file %s\n\007", init_filename);
+
+            init_filename = NULL;
+        }
+
+        while (!frame.drawn_game) {
             level = (frame.move_color) ? black_level : white_level;
             bestmove.from = 0;
 
@@ -152,6 +174,8 @@ int main (argc, argv) int argc; char **argv;
                 }
 
                 if (!level) {
+                    char command [81], *cptr;
+
                     print_frame (stdout, &frame);
                     fprintf (stderr, "input move or command: ");
                     quit = resign = FALSE;
