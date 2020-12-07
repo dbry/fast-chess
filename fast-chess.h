@@ -116,21 +116,7 @@ typedef struct { int from, delta, promo; } MOVE;
 #define BPRANK 7
 
 void init_frame (FRAME *frame);
-void print_frame (FILE *out, FRAME *frame);
-void print_square_name (FILE *out, int index);
-void print_move (FILE *out, MOVE *move);
-void print_game (FILE *out, MOVE *gameplay, int nmoves);
-int input_square_name (char **in);
-int input_move (char *in, MOVE *move);
-int input_game (FILE *in, MOVE **gameplay, int *gameplay_moves);
-
+void init_random (unsigned int seed);
 int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int flags);
-int in_check (FRAME *frame);
-int check_attack (square *dst, int color);
 int generate_move_list (MOVE list [], FRAME *frame);
 void execute_move (FRAME *frame, MOVE *move);
-int sum_material (FRAME *frame, int color);
-int count_pawns (FRAME *frame, int color);
-int count_center_pawns (FRAME *frame, int color);
-void scramble_moves (MOVE moves [], int nmoves);
-int position_id (FRAME *frame);
