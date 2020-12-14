@@ -54,14 +54,15 @@ static int input_move (char *in, MOVE *move);
 static int input_game (FILE *in, MOVE **gameplay, int *gameplay_moves);
 
 static const char *sign_on = "\n"
-" FAST-CHESS  Trivial Chess Playing Program  Version 0.1\n"
+" FAST-CHESS  Trivial Chess Playing Program  Version 0.2\n"
 " Copyright (c) 2020 David Bryant.  All Rights Reserved.\n\n";
 
 static char *help = "\n\
  Usage:   fast-chess [options] [saved game to load on startup]\n\n\
  Options:\n\
   -H:     display this help message\n\
-  -R:     randomize so that we always start with a different game\n\
+  -R:     randomize for different games\n\
+  -Tn:    maximum thread count, 0 or 1 for single-threaded\n\
   -Gn:    specify number of games to play (otherwise stops on keypress)\n\
   -Wn:    computer plays white at level n (1 to about 6; higher is slower)\n\
   -Bn:    computer plays black at level n (1 to about 6; higher is slower)\n\n\
@@ -69,7 +70,7 @@ static char *help = "\n\
   H <cr>:        display this help message\n\
   W n <cr>:      computer plays white at level n\n\
   B n <cr>:      computer plays black at level n\n\
-  E n <cr>:      evaluate legal moves at level n (default=2)\n\
+  E n <cr>:      evaluate legal moves at level n (default=1)\n\
   T n <cr>:      take back n moves (default=1)\n\
   W <cr>:        returns white play to user\n\
   B <cr>:        returns black play to user\n\
@@ -80,11 +81,12 @@ static char *help = "\n\
 
 int main (argc, argv) int argc; char **argv;
 {
+    int nmoves, mindex, maxmoves = 0, minmoves = 1000, asked4help = FALSE, quit = FALSE, resign = FALSE, max_threads = 8;
     int games_to_play = 0, games = 0, whitewins = 0, blackwins = 0, draws = 0, whitedraws = 0, blackdraws = 0;
-    int nmoves, mindex, maxmoves = 0, minmoves = 1000, asked4help = FALSE, quit = FALSE, resign = FALSE;
+    int default_flags = EVAL_POSITION | EVAL_SCALE | EVAL_PRUNE | EVAL_DECAY | EVAL_SCRAMBLE | EVAL_THREADS;
     int white_level = 0, black_level = 0, level;
-    MOVE bestmove, moves [MAX_MOVES + 10];
     time_t start_time, stop_time;
+    MOVE moves [MAX_MOVES + 10];
     char *init_filename = NULL;
     long totalmoves = 0;
     FRAME frame;
@@ -114,6 +116,14 @@ int main (argc, argv) int argc; char **argv;
                 case 'R': case 'r':
                     init_random (time (NULL));
                     srand (time (NULL));
+                    break;
+
+                case 'T': case 't':
+                    max_threads = atoi (++*argv);
+
+                    if (max_threads < 2)
+                        default_flags &= ~EVAL_THREADS;
+
                     break;
 
                 default:
@@ -161,11 +171,18 @@ int main (argc, argv) int argc; char **argv;
         }
 
         while (!frame.drawn_game) {
+            MOVE bestmove;
+
             level = (frame.move_color) ? black_level : white_level;
             bestmove.from = 0;
 
-            if (level > 0)
-                eval_position (&frame, &bestmove, level, 20000, EVAL_BASE | EVAL_POSITION | EVAL_SCALE | EVAL_PRUNE | EVAL_DECAY | EVAL_SCRAMBLE);
+            if (level > 0) {
+                frame.depth = level;
+                frame.flags = default_flags;
+                frame.max_threads = max_threads;
+                frame.bestmove_p = &bestmove;
+                eval_position (&frame);
+            }
             else if ((nmoves = generate_move_list (moves, &frame)) != 0) {
                 if (nmoves > MAX_MOVES) {
                     print_frame (stdout, &frame);
@@ -260,8 +277,35 @@ int main (argc, argv) int argc; char **argv;
 
                             case 'E': case 'e':
                                 eval_level = atoi (cptr);
-                                if (eval_level < 1) eval_level = 2;
-                                eval_position (&frame, NULL, eval_level, 20000, EVAL_DEBUG | EVAL_BASE | EVAL_POSITION | EVAL_SCALE | EVAL_DECAY | EVAL_PRUNE);
+                                if (eval_level < 1) eval_level = 1;
+
+                                printf ("\n");
+
+                                for (mindex = 0; mindex < nmoves && !_kbhit (); ++mindex) {
+                                    int depth;
+
+                                    printf ("%2d: ", mindex + 1);
+                                    print_move (stdout, moves + mindex);
+                                    printf ("score%s =", eval_level > 1 ? "s" : "");
+
+                                    for (depth = 0; depth < eval_level && !_kbhit (); ++depth) {
+                                        FRAME temp = frame;
+
+                                        temp.depth = depth;
+                                        temp.bestmove_p = NULL;
+                                        temp.flags = default_flags;
+                                        temp.max_threads = max_threads;
+                                        execute_move (&temp, moves + mindex);
+                                        printf ("%7d", - (int) (long) eval_position (&temp));
+                                        fflush (stdout);
+                                    }
+
+                                    printf ("\n");
+                                }
+
+                                if (_kbhit ())
+                                    getch ();
+
                                 break;
 
                             case 'S': case 's':

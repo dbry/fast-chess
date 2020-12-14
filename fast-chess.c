@@ -17,7 +17,6 @@ static int count_pawns (FRAME *frame, int color);
 static int count_center_pawns (FRAME *frame, int color);
 static void scramble_moves (MOVE moves [], int nmoves);
 static int position_id (FRAME *frame);
-static void print_move (FILE *out, MOVE *move);
 
 static unsigned int random_seed;
 
@@ -81,41 +80,53 @@ void init_frame (FRAME *frame)
     frame->num_cap_pos = 0;
 }
 
-int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int flags)
+void *eval_position (void *threadid)
 {
-    int nmoves, mindex, value, min_value;
+    FRAME *frame = (FRAME *) threadid;
+    int nmoves, mindex, min_value;
     MOVE moves [MAX_MOVES + 10];
-    FRAME temp;
 
-    if ((flags & EVAL_BASE) && frame->move_number == 1 && !frame->move_color)
-        depth = 2;
+    if (!(frame->flags & EVAL_INTERNAL)) {
+        if (frame->depth < 0) {
+            fprintf (stderr, "calling eval_position() with depth = %d!\n", frame->depth);
+            exit (1);
+        }
 
-    if (flags & EVAL_DECAY)
-        max_value += (max_value + 128) >> 8;
+        if (frame->depth) {
+            if (frame->move_number == 1 && !frame->move_color)
+                frame->depth = 2;
+            else if (frame->flags & EVAL_SCALE) {
+                int total_material = frame->white_material + frame->black_material;
 
-    if ((flags & EVAL_BASE) && (flags & EVAL_SCALE)) {
-        int total_material = frame->white_material + frame->black_material;
+                if (total_material < 40) frame->depth++;
+                if (total_material < 20) frame->depth++;
+                if (total_material < 10) frame->depth++;
+            }
+        }
+        else if (frame->bestmove_p) {
+            fprintf (stderr, "can't get bestmove with no depth!\n");
+            exit (1);
+        }
 
-        if (total_material < 40) depth++;
-        if (total_material < 20) depth++;
-        if (total_material < 10) depth++;
+        frame->min_value_p = NULL;
     }
 
-    if (depth < -24) {
-        fprintf (stderr, "depth = %d!\n", depth);
+    if (frame->depth < -24) {
+        fprintf (stderr, "depth = %d!\n", frame->depth);
         exit (1);
     }
 
-    if (frame->drawn_game)
-        return 0;
-
-    if (!(nmoves = generate_move_list (moves, frame))) {
-        if (frame->in_check)
-            return -10000;
+    if (frame->drawn_game || !(nmoves = generate_move_list (moves, frame))) {
+        if (frame->drawn_game)
+            min_value = 0;
+        else if (frame->in_check)
+            min_value = 10000;
         else {
             frame->drawn_game = STALEMATE;
-            return 0;
+            min_value = 0;
         }
+
+        goto eval_position_exit;
     }
 
     if (nmoves > MAX_MOVES) {
@@ -123,40 +134,64 @@ int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int f
         exit (1);
     }
 
-    if (flags & EVAL_SCRAMBLE)
+    if (frame->flags & EVAL_SCRAMBLE)
         scramble_moves (moves, nmoves);
 
-    if (depth > 0 || frame->in_check) {
+    if (frame->depth > 0 || frame->in_check) {
         min_value = 20000;
 
-        if (flags & EVAL_DEBUG)
-            printf ("\n");
+        if (!(frame->flags & EVAL_INTERNAL) && (frame->flags & EVAL_THREADS) && frame->max_threads > 1) {
+            int thread_offset = frame->max_threads - 1;
+            FRAME *frames [MAX_MOVES + 10];
 
-        for (mindex = 0; mindex < nmoves; ++mindex) {
+            for (mindex = 0; mindex < nmoves + thread_offset; ++mindex) {
+                if (mindex < nmoves) {
+                    frames [mindex] = malloc (sizeof (FRAME));
+                    *frames [mindex] = *frame;
+                    execute_move (frames [mindex], moves + mindex);
+                    frames [mindex]->depth--;
+                    frames [mindex]->flags |= EVAL_INTERNAL | EVAL_MUTEX;
+                    frames [mindex]->thismove = moves [mindex];
+                    frames [mindex]->min_value_p = &min_value;
+                    pthread_mutex_init (&frames [mindex]->mutex, NULL);
+                    pthread_create (&frames [mindex]->pthread, NULL, eval_position, (void *) frames [mindex]);
+                }
 
-            temp = *frame;
-            execute_move (&temp, moves + mindex);
-            value = eval_position (&temp, NULL, depth-1, (flags & EVAL_DEBUG) ? 20000 : min_value, flags & ~(EVAL_DEBUG | EVAL_BASE));
-
-            if (flags & EVAL_DEBUG) {
-                printf ("%d: ", mindex + 1);
-                print_move (stdout, moves + mindex);
-                printf ("value = %d\n", -value);
-            }
-
-            if (value < min_value) {
-                min_value = value;
-
-                if (bestmove)
-                    *bestmove = moves [mindex];
-
-                if ((flags & EVAL_PRUNE) && -min_value >= max_value)
-                    break;
+                if (mindex - thread_offset >= 0) {
+                    pthread_join (frames [mindex - thread_offset]->pthread, NULL);
+                    pthread_mutex_destroy (&frames [mindex - thread_offset]->mutex);
+                    free (frames [mindex - thread_offset]);
+                }
             }
         }
+        else {
+            FRAME temp;
 
-        if (flags & EVAL_DEBUG)
-            printf ("\n");
+            for (mindex = 0; mindex < nmoves; ++mindex) {
+                if ((frame->flags & EVAL_PRUNE) && frame->min_value_p) {
+                    int min_value_ret = min_value;
+
+                    if (frame->flags & EVAL_DECAY)
+                        min_value_ret -= (min_value_ret + 128) >> 8;
+
+                    if (-min_value_ret >= *frame->min_value_p)
+                        break;
+                }
+
+                temp = *frame;
+                execute_move (&temp, moves + mindex);
+                temp.depth--;
+                temp.flags |= EVAL_INTERNAL;
+                temp.min_value_p = &min_value;
+
+                if (frame->flags & EVAL_INTERNAL)
+                    temp.bestmove_p = NULL;
+                else
+                    temp.thismove = moves [mindex];
+
+                eval_position (&temp);
+            }
+        }
     }
     else {
         if (frame->white_material > MAX_MATERIAL || frame->black_material > MAX_MATERIAL)
@@ -172,7 +207,7 @@ int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int f
         if (!frame->move_color)
             min_value = -min_value;
 
-        if (flags & EVAL_POSITION) {
+        if (frame->flags & EVAL_POSITION) {
             min_value += count_center_pawns (frame, frame->move_color ^ COLOR) * 2;
             min_value -= count_center_pawns (frame, frame->move_color) * 2;
             frame->move_color ^= COLOR;
@@ -182,9 +217,17 @@ int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int f
 
         for (mindex = 0; mindex < nmoves; ++mindex) {
             int dest = moves [mindex].from + moves [mindex].delta, cindex;
+            FRAME temp;
 
-            if ((flags & EVAL_PRUNE) && -min_value >= max_value)
-                break;
+            if ((frame->flags & EVAL_PRUNE) && frame->min_value_p) {
+                int min_value_ret = min_value;
+
+                if (frame->flags & EVAL_DECAY)
+                    min_value_ret -= (min_value_ret + 128) >> 8;
+
+                if (-min_value_ret >= *frame->min_value_p)
+                    break;
+            }
 
             if (!frame->board [dest])
                 continue;
@@ -203,17 +246,34 @@ int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int f
             }
 
             execute_move (&temp, moves + mindex);
-            value = eval_position (&temp, NULL, depth-1, min_value, flags);
+            temp.depth--;
+            temp.flags |= EVAL_INTERNAL;
+            temp.min_value_p = &min_value;
 
-            if (value < min_value)
-                min_value = value;
+            eval_position (&temp);
         }
     }
 
-    if (flags & EVAL_DECAY)
+    if (frame->flags & EVAL_DECAY)
         min_value -= (min_value + 128) >> 8;
 
-    return -min_value;
+eval_position_exit:
+    if (frame->min_value_p) {
+        if (frame->flags & EVAL_MUTEX)
+            pthread_mutex_lock (&frame->mutex);
+
+        if (-min_value < *frame->min_value_p) {
+            *frame->min_value_p = -min_value;
+
+            if (frame->bestmove_p)
+                *frame->bestmove_p = frame->thismove;
+        }
+
+        if (frame->flags & EVAL_MUTEX)
+            pthread_mutex_unlock (&frame->mutex);
+    }
+
+    return (void *) (long) -min_value;
 }
 
 static int in_check (FRAME *frame)
@@ -803,27 +863,4 @@ static int position_id (FRAME *frame)
             sum += (sum << 1) + (SQUARE (frame, rank, file) & (PIECE | COLOR));
 
     return sum;
-}
-
-static void print_square_name (FILE *out, int index)
-{
-    int rank = (index / (BOARD_SIDE + 4)) - 1;
-    int file = (index % (BOARD_SIDE + 4)) - 1;
-
-    fputc (file - 1 + 'a', out);
-    fputc (rank + '0', out);
-}
-
-static void print_move (FILE *out, MOVE *move)
-{
-    static char *pnames = "  PKNBRQ";
-
-    print_square_name (out, move->from);
-    fputc ('-', out);
-    print_square_name (out, move->from + move->delta);
-
-    if (move->promo)
-        fprintf (out, "/%c ", pnames [move->promo]);
-    else
-        fprintf (out, "   ");
 }

@@ -15,6 +15,7 @@
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 #define FALSE (0)
 #define TRUE (!FALSE)
@@ -47,13 +48,16 @@
 
 /* flags for eval_position() */
 
-#define EVAL_BASE       0x1
-#define EVAL_DEBUG      0x2
-#define EVAL_POSITION   0x4
+#define EVAL_POSITION   0x1
+#define EVAL_SCRAMBLE   0x2
+#define EVAL_THREADS    0x4
 #define EVAL_PRUNE      0x8
 #define EVAL_SCALE      0x10
 #define EVAL_DECAY      0x20
-#define EVAL_SCRAMBLE   0x40
+
+/* internal use only */
+#define EVAL_INTERNAL   0x100
+#define EVAL_MUTEX      0x200
 
 typedef unsigned char square;
 
@@ -62,15 +66,20 @@ typedef unsigned char square;
 #define MAX_POS_IDS     50
 #define MAX_CAP_POS     2
 
+typedef struct { int from, delta, promo; } MOVE;
+
 typedef struct {
     int move_number, move_color, in_check, drawn_game, reversable_moves, num_cap_pos;
     int white_king, white_material, white_pawns, white_epsquare;
     int black_king, black_material, black_pawns, black_epsquare;
     square board [(BOARD_SIDE + 4) * (BOARD_SIDE + 4)];
     int capture_positions [MAX_CAP_POS], position_ids [MAX_POS_IDS];
+    // for eval_position() parameters and threading...
+    int depth, *min_value_p, flags, max_threads;
+    MOVE *bestmove_p, thismove;
+    pthread_mutex_t mutex;
+    pthread_t pthread;
 } FRAME;
-
-typedef struct { int from, delta, promo; } MOVE;
 
 #define DELTA(rank, file) ((rank) * (BOARD_SIDE + 4) + (file))
 #define INDEX(rank, file) (((rank) + 1) * (BOARD_SIDE + 4) + (file) + 1)
@@ -117,6 +126,6 @@ typedef struct { int from, delta, promo; } MOVE;
 
 void init_frame (FRAME *frame);
 void init_random (unsigned int seed);
-int eval_position (FRAME *frame, MOVE *bestmove, int depth, int max_value, int flags);
+void *eval_position (void *threadid);
 int generate_move_list (MOVE list [], FRAME *frame);
 void execute_move (FRAME *frame, MOVE *move);
