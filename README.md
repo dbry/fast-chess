@@ -20,41 +20,46 @@ Another thing I wanted was for the program to not play the same game every time,
 
 To its credit it does handle all legal chess, including castling and its rules, en passant capture, and detecting draws based on the 50-move and 3-time repeated position rules.
 
+For version 0.2 I added the ability to take back moves and added multithreaded operation via pthreads to speed up play on multicore machines.
+
 Good luck!
 
 ## Building
 
-FAST-CHESS is a command-line application. To build it on Linux or OS-X:
+FAST-CHESS is a command-line application. To build it on Linux:
 
-> $ gcc -O3 *.c -o fast-chess
+> $ gcc -O3 *.c -pthread -o fast-chess
 
 There's also an executable for Windows available here.
 
 Here's the "help" display and the board display format:
 
 ```
- FAST-CHESS  Trivial Chess Playing Program  Version 0.1
+ FAST-CHESS  Trivial Chess Playing Program  Version 0.2
  Copyright (c) 2020 David Bryant.  All Rights Reserved.
 
+ Usage:   fast-chess [options] [saved game to load on startup]
 
  Options:
-  -R:     randomize so that we always start with a different game
+  -H:     display this help message
+  -R:     randomize for different games
+  -Tn:    maximum thread count, 0 or 1 for single-threaded
   -Gn:    specify number of games to play (otherwise stops on keypress)
   -Wn:    computer plays white at level n (1 to about 6; higher is slower)
   -Bn:    computer plays black at level n (1 to about 6; higher is slower)
-  -En:    evaluate available moves at level n and display scores (default=2)
 
  Commands:
-  H <cr>:        print this message
+  H <cr>:        display this help message
   W n <cr>:      computer plays white at level n
   B n <cr>:      computer plays black at level n
+  E n <cr>:      evaluate legal moves at level n (default=1)
+  T n <cr>:      take back n moves (default=1)
   W <cr>:        returns white play to user
   B <cr>:        returns black play to user
   S <file><cr>:  save game to specified file
   L <file><cr>:  load game from specified file
   R <cr>:        resign game and start new game
   Q <cr>:        resign game and quit
-
 
     a  b  c  d   e  f  g  h
 
@@ -71,6 +76,7 @@ Here's the "help" display and the board display format:
 
 1: white has 20 moves (material even)
 input move or command:
+
 ```
 ## Future improvements?
 
@@ -80,7 +86,7 @@ There are many ways to improve fast-chess by adding stuff, but the first thing w
 
 2. The position evaluation is based on simply the material of both sides, the number of moves each side can make (a good indication of development), and a little weighing for having pawns in the center. A minor issue with this is that it promotes early queen development, but a worse problem is that it is hopeless for endgame scenarios and recognizing passed pawns. A scheme that modifies the position evaluation based on the distribution of material would help here.
 
-3. Using multiple cores for evaluation would help with modern CPUs. This wouldn't be that hard to do, but is complicated by the alpha-beta pruning.
+3. ~~Using multiple cores for evaluation would help with modern CPUs. This wouldn't be that hard to do, but is complicated by the alpha-beta pruning.~~ Done.
 
 4. I believe that more advanced chess engines use hashes of the evaluated positions to avoid duplication. This program uses a trivial hash to implement the 3-time position repeat draw, but something more might be needed to reduce collisions.
 
