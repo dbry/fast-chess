@@ -10,6 +10,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
@@ -50,14 +51,13 @@
 
 #define EVAL_POSITION   0x1
 #define EVAL_SCRAMBLE   0x2
-#define EVAL_THREADS    0x4
-#define EVAL_PRUNE      0x8
-#define EVAL_SCALE      0x10
-#define EVAL_DECAY      0x20
+#define EVAL_PRUNE      0x4
+#define EVAL_SCALE      0x8
+#define EVAL_DECAY      0x10
 
 /* internal use only */
 #define EVAL_INTERNAL   0x100
-#define EVAL_MUTEX      0x200
+#define EVAL_PTHREAD    0x200
 
 typedef unsigned char square;
 
@@ -75,7 +75,7 @@ typedef struct {
     square board [(BOARD_SIDE + 4) * (BOARD_SIDE + 4)];
     int capture_positions [MAX_CAP_POS], position_ids [MAX_POS_IDS];
     // for eval_position() parameters and threading...
-    int depth, *min_value_p, flags, max_threads;
+    int depth, *min_value_p, flags, max_threads, done;
     MOVE *bestmove_p, thismove;
     pthread_mutex_t mutex;
     pthread_t pthread;

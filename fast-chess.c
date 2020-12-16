@@ -140,28 +140,39 @@ void *eval_position (void *threadid)
     if (frame->depth > 0 || frame->in_check) {
         min_value = 20000;
 
-        if (!(frame->flags & EVAL_INTERNAL) && (frame->flags & EVAL_THREADS) && frame->max_threads > 1) {
-            int thread_offset = frame->max_threads - 1;
+        if (!(frame->flags & EVAL_INTERNAL) && nmoves > 1 && frame->max_threads > 1 && frame->depth > 2) {
+            int running_threads = 0, dindex;
             FRAME *frames [MAX_MOVES + 10];
 
-            for (mindex = 0; mindex < nmoves + thread_offset; ++mindex) {
-                if (mindex < nmoves) {
+            for (mindex = 0; mindex < nmoves || running_threads;) {
+
+                while (mindex < nmoves && running_threads < frame->max_threads) {
                     frames [mindex] = malloc (sizeof (FRAME));
                     *frames [mindex] = *frame;
                     execute_move (frames [mindex], moves + mindex);
                     frames [mindex]->depth--;
-                    frames [mindex]->flags |= EVAL_INTERNAL | EVAL_MUTEX;
+                    frames [mindex]->done = 0;
                     frames [mindex]->thismove = moves [mindex];
                     frames [mindex]->min_value_p = &min_value;
+                    frames [mindex]->flags |= EVAL_INTERNAL | EVAL_PTHREAD;
                     pthread_mutex_init (&frames [mindex]->mutex, NULL);
                     pthread_create (&frames [mindex]->pthread, NULL, eval_position, (void *) frames [mindex]);
+                    running_threads++;
+                    mindex++;
                 }
 
-                if (mindex - thread_offset >= 0) {
-                    pthread_join (frames [mindex - thread_offset]->pthread, NULL);
-                    pthread_mutex_destroy (&frames [mindex - thread_offset]->mutex);
-                    free (frames [mindex - thread_offset]);
-                }
+                for (dindex = 0; dindex < mindex; ++dindex)
+                    if (frames [dindex] && frames [dindex]->done) {
+                        pthread_join (frames [dindex]->pthread, NULL);
+                        pthread_mutex_destroy (&frames [dindex]->mutex);
+                        free (frames [dindex]);
+                        frames [dindex] = NULL;
+                        running_threads--;
+                        dindex = -1;
+                    }
+
+                if (running_threads == frame->max_threads || (running_threads && mindex == nmoves))
+                    usleep (1000);
             }
         }
         else {
@@ -180,9 +191,10 @@ void *eval_position (void *threadid)
 
                 temp = *frame;
                 execute_move (&temp, moves + mindex);
-                temp.depth--;
                 temp.flags |= EVAL_INTERNAL;
+                temp.flags &= ~EVAL_PTHREAD;
                 temp.min_value_p = &min_value;
+                temp.depth--;
 
                 if (frame->flags & EVAL_INTERNAL)
                     temp.bestmove_p = NULL;
@@ -246,9 +258,10 @@ void *eval_position (void *threadid)
             }
 
             execute_move (&temp, moves + mindex);
-            temp.depth--;
             temp.flags |= EVAL_INTERNAL;
+            temp.flags &= ~EVAL_PTHREAD;
             temp.min_value_p = &min_value;
+            temp.depth--;
 
             eval_position (&temp);
         }
@@ -259,7 +272,7 @@ void *eval_position (void *threadid)
 
 eval_position_exit:
     if (frame->min_value_p) {
-        if (frame->flags & EVAL_MUTEX)
+        if (frame->flags & EVAL_PTHREAD)
             pthread_mutex_lock (&frame->mutex);
 
         if (-min_value < *frame->min_value_p) {
@@ -269,10 +282,11 @@ eval_position_exit:
                 *frame->bestmove_p = frame->thismove;
         }
 
-        if (frame->flags & EVAL_MUTEX)
+        if (frame->flags & EVAL_PTHREAD)
             pthread_mutex_unlock (&frame->mutex);
     }
 
+    frame->done = 1;
     return (void *) (long) -min_value;
 }
 
@@ -847,7 +861,7 @@ static void scramble_moves (MOVE moves [], int nmoves)
 
     for (mindex = 0; mindex < nmoves; ++mindex) {
         random_seed = ((random_seed << 4) - random_seed) ^ 1;
-        rindex = (random_seed >> 1) % nmoves;
+        rindex = (random_seed >> 17) % nmoves;
         temp = moves [rindex];
         moves [rindex] = moves [mindex];
         moves [mindex] = temp;

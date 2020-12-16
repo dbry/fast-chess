@@ -39,6 +39,7 @@
 #include "fast-chess.h"
 
 #ifdef _WIN32
+#include <windows.h>
 #include <conio.h>
 #else
 int _kbhit (void), getch (void);
@@ -81,9 +82,9 @@ static char *help = "\n\
 
 int main (argc, argv) int argc; char **argv;
 {
-    int nmoves, mindex, maxmoves = 0, minmoves = 1000, asked4help = FALSE, quit = FALSE, resign = FALSE, max_threads = 8;
+    int nmoves, mindex, maxmoves = 0, minmoves = 1000, asked4help = FALSE, quit = FALSE, resign = FALSE, max_threads;
     int games_to_play = 0, games = 0, whitewins = 0, blackwins = 0, draws = 0, whitedraws = 0, blackdraws = 0;
-    int default_flags = EVAL_POSITION | EVAL_SCALE | EVAL_PRUNE | EVAL_DECAY | EVAL_SCRAMBLE | EVAL_THREADS;
+    int default_flags = EVAL_POSITION | EVAL_SCALE | EVAL_PRUNE | EVAL_DECAY | EVAL_SCRAMBLE;
     int white_level = 0, black_level = 0, level;
     time_t start_time, stop_time;
     MOVE moves [MAX_MOVES + 10];
@@ -91,6 +92,14 @@ int main (argc, argv) int argc; char **argv;
     long totalmoves = 0;
     FRAME frame;
     FILE *file;
+
+#ifdef _WIN32
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    max_threads = sysinfo.dwNumberOfProcessors;
+#else
+    max_threads = sysconf (_SC_NPROCESSORS_ONLN);
+#endif
 
     while (--argc) {
 
@@ -120,10 +129,6 @@ int main (argc, argv) int argc; char **argv;
 
                 case 'T': case 't':
                     max_threads = atoi (++*argv);
-
-                    if (max_threads < 2)
-                        default_flags &= ~EVAL_THREADS;
-
                     break;
 
                 default:
