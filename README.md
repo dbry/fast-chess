@@ -10,15 +10,15 @@ Distributed under the [BSD Software License](https://github.com/dbry/fast-chess/
 
 ## What is this?
 
-This is a simple chess-playing program that I wrote a lifetime ago, just because I thought I could. The idea was if I could make the chess engine really fast by using a lot of inline code and making the final evaluation as simple as possible, I could process enough moves to make a really good player, but it never really worked out.
+This is a simple chess-playing program that I wrote a lifetime ago, just because I thought I could. The idea was if I could make the chess engine really fast by using a lot of inline code, making the final evaluation as simple as possible, and using multithreading (just added), I could process enough moves to make a really good player.
 
-I don't really know how good it is relative to other really simple chess programs, but at level 5 (which is tolerable) it provides me a challenge (which isn't saying much) and it doesn't seem to make really bad moves.
+I don't really know how good it is relative to other really simple chess programs, but at level 5 (which is very tolerable speed-wise) it provides me a strong challenge and it never seems to make obviously bad moves.
 
 It has no stored openings and it gets pretty lost in the endgame because it can't look far ahead enough to force a checkmate even with overwhelming material or recognize passed pawns until it's too late. So even if you screw up and lose in the middle game you can sometimes get a pawn promoted when it's not paying attention, or at least squeak out a draw by keeping your king in the center of the board.
 
 Another thing I wanted was for the program to not play the same game every time, so it randomly scrambles the moves before evaluating them (which results in different outcomes). This also makes it more interesting when it plays itself (which is a feature I've used extensively in development).
 
-To its credit it does handle all legal chess, including castling and its rules, en passant capture, and detecting draws based on the 50-move and 3-time repeated position rules.
+To its credit it handles all legal chess, including castling and its rules, en passant capture, and detecting draws based on the 50-move and 3-time repeated position rules.
 
 For version 0.2 I added the ability to take back moves and added multithreaded operation via pthreads to speed up play on multicore machines.
 
@@ -30,7 +30,7 @@ FAST-CHESS is a command-line application. To build it on Linux:
 
 > $ gcc -O3 *.c -pthread -o fast-chess
 
-There's also an executable for Windows available here.
+There are also executables for Windows and Mac available on the [release page](https://github.com/dbry/fast-chess/releases/tag/v0.2).
 
 Here's the "help" display and the board display format:
 
